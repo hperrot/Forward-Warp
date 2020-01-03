@@ -15,9 +15,8 @@ class forward_warp_rescalled(Module):
         # get mask
         ones = torch.ones_like(im0)
         mask = self.forward_warp(ones, flow)
-        # where mask is 0, image will be 0 as well
-        # division by 1 does not change this but catches 
-        mask[mask < self.eps] = 1
+        # prevent division by 0
+        mask.clamp_(min=self.eps)
 
         # warp image
         warped = self.forward_warp(im0, flow)
