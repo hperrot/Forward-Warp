@@ -21,7 +21,8 @@ class forward_warp_function(Function):
         assert(im0.shape[-2:] == flow.shape[1:3])
         assert(flow.shape[3] == 2)
 
-        ctx.save_for_backward(im0, flow, interpolation_mode)
+        ctx.save_for_backward(im0, flow)
+        ctx.interpolation_mode = interpolation_mode
         if im0.is_cuda:
             im1 = forward_warp_cuda.forward(im0, flow, interpolation_mode)
         else:
@@ -31,14 +32,15 @@ class forward_warp_function(Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        im0, flow, interpolation_mode = ctx.saved_variables
+        im0, flow = ctx.saved_variables
+        interpolation_mode = ctx.interpolation_mode
         if grad_output.is_cuda:
             im0_grad, flow_grad = forward_warp_cuda.backward(
                 grad_output, im0, flow, interpolation_mode)
         else:
             im0_grad, flow_grad = Forward_Warp_Python.backward(
                 grad_output, im0, flow, interpolation_mode)
-        return im0_grad, flow_grad
+        return im0_grad, flow_grad, None
 
 
 class forward_warp(Module):

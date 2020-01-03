@@ -35,7 +35,7 @@ def get_color_mask(mask, value=1, margin=0.1):
     mask_colored[:,1,:,:] = get_map(mask, value, margin, smaller_than=True, bigger_than=True)
     map_bigger = get_map(mask, value, margin, bigger_than=True)
     mask_colored[:,2,:,:] = map_bigger
-    count_bigger = map_bigger.sum().cpu().numpy()
+    count_bigger = map_bigger.sum().cpu().detach().numpy()
     count_pixels = map_bigger.numel()
     print(margin, count_bigger / count_pixels, count_bigger, count_pixels)
 
@@ -44,7 +44,7 @@ def get_color_mask(mask, value=1, margin=0.1):
 
 def log_image(image, name):
     image = image.clone().permute(0, 2, 3, 1)[0]
-    cv2.imwrite("{}.png".format(name), image.cpu().numpy().astype(np.uint8))
+    cv2.imwrite("{}.png".format(name), image.cpu().detach().numpy().astype(np.uint8))
     print("{}: min {}, max {}, mean {}".format(name, image.min(), image.max(), image.mean()))
 
 
@@ -54,9 +54,9 @@ if __name__ == "__main__":
     im1 = cv2.imread("im1.png")[np.newaxis, :, :, :]
     with open("flow.pkl", "rb+") as f:
         flow = pickle.load(f)
-    im0 = torch.FloatTensor(im0).permute(0, 3, 1, 2)
-    im1 = torch.FloatTensor(im1).permute(0, 3, 1, 2)
-    flow = torch.FloatTensor(flow)
+    im0 = torch.tensor(im0, dtype=torch.float32, requires_grad=True).permute(0, 3, 1, 2)
+    im1 = torch.tensor(im1, dtype=torch.float32, requires_grad=True).permute(0, 3, 1, 2)
+    flow = torch.tensor(flow, dtype=torch.float32, requires_grad=True)
 
     fw = forward_warp()
     fw_rescalled = forward_warp_rescalled()
@@ -99,3 +99,6 @@ if __name__ == "__main__":
         mask_colored = get_color_mask(mask_cuda, margin=margin)
         log_image(mask_colored * 255, "mask_colored_{}".format(str(margin)))
     # margin 0.5 or 0.1 should be good
+
+    # test backward
+    im1_cuda.mean().backward()
