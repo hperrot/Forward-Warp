@@ -20,6 +20,8 @@ class forward_warp_function(Function):
         assert(im0.shape[0] == flow.shape[0])
         assert(im0.shape[-2:] == flow.shape[1:3])
         assert(flow.shape[3] == 2)
+        assert(im0.is_contiguous())
+        assert(flow.is_contiguous())
 
         ctx.save_for_backward(im0, flow)
         ctx.interpolation_mode = interpolation_mode
