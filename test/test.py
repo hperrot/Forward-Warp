@@ -4,7 +4,7 @@ import torch
 import pickle
 import numpy as np
 
-from Forward_Warp import forward_warp, forward_warp_rescalled
+from Forward_Warp import forward_warp, forward_warp_rescaled
 
 
 def get_mask(img, flow):
@@ -59,7 +59,7 @@ if __name__ == "__main__":
     flow = torch.tensor(flow, dtype=torch.float32, requires_grad=True)
 
     fw = forward_warp()
-    fw_rescalled = forward_warp_rescalled()
+    fw_rescaled = forward_warp_rescaled()
 
     # since = time.time()
     # im1_python = fw(im0, flow)
@@ -75,24 +75,24 @@ if __name__ == "__main__":
     
     torch.cuda.synchronize()
     since = time.time()
-    im1_cuda_rescalled = fw_rescalled(im0, flow)
+    im1_cuda_rescaled = fw_rescaled(im0, flow)
     torch.cuda.synchronize()
-    print("cuda rescalled version forward cost time: {}".format(time.time()-since))
+    print("cuda rescaled version forward cost time: {}".format(time.time()-since))
     
     loss_fn = torch.nn.MSELoss()
     # python_loss = loss_fn(im1_python, im1)
     # print("python loss: {}".format(python_loss))
     cuda_loss = loss_fn(im1_cuda, im1.cuda())
     print("cuda loss: {}".format(cuda_loss))
-    cuda_rescalled_loss = loss_fn(im1_cuda_rescalled, im1.cuda())
-    print("cuda rescalled loss: {}".format(cuda_rescalled_loss))
+    cuda_rescaled_loss = loss_fn(im1_cuda_rescaled, im1.cuda())
+    print("cuda rescaled loss: {}".format(cuda_rescaled_loss))
 
     previous_loss = loss_fn(im0.cuda(), im1.cuda())
     print("previous loss: {}".format(previous_loss))
 
     # log_image(im1_python, "im1_python")
     log_image(im1_cuda, "im1_cuda")
-    log_image(im1_cuda_rescalled, "im1_cuda_rescalled")
+    log_image(im1_cuda_rescaled, "im1_cuda_rescaled")
     
     mask_cuda = get_mask(im0, flow)
     for margin in [0.5, 0.1, 0.01, 0.001]:

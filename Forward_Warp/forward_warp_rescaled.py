@@ -3,7 +3,7 @@ from torch.nn import Module
 
 from .forward_warp import forward_warp
 
-class forward_warp_rescalled(Module):
+class forward_warp_rescaled(Module):
     """fowrard warp where input image and warped image are in same value range"""
     def __init__(self, eps=1e-6):
         super().__init__()
