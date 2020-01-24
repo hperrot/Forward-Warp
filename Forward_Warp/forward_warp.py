@@ -22,6 +22,8 @@ class forward_warp_function(Function):
         assert(flow.shape[3] == 2)
         assert(im0.is_contiguous())
         assert(flow.is_contiguous())
+        assert(torch.isnan(flow).long().sum() == 0)
+        assert(torch.isinf(flow).long().sum() == 0)
 
         ctx.save_for_backward(im0, flow)
         ctx.interpolation_mode = interpolation_mode
