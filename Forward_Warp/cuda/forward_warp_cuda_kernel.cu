@@ -141,6 +141,144 @@ __global__ void forward_warp_cuda_backward_kernel(
   }
 }
 
+template <typename scalar_t>
+static __forceinline__ __device__ 
+void find_max_motion(
+    const int d,
+    const scalar_t wght,
+    int* d_buffer_p
+  ) {
+    if (wght >= 0.25) {
+    // if (wght > 0.) {
+    atomicMax(d_buffer_p, d);
+  }
+}
+
+template <typename scalar_t>
+static __forceinline__ __device__ 
+void select_max_motion(
+      const int d,
+      const scalar_t h,
+      const scalar_t wght,
+      const int* d_buffer_p,
+      scalar_t* h_buffer_p,
+      scalar_t* wght_buffer_p
+  ) {
+    if (wght >= 0.25) {
+    // if (wght > 0.) {
+    // *d_buffer_p is always >= d, this means, this is always positive, so no abs() is needed
+    if (*d_buffer_p - d <= MOTION_TH) {
+      atomicAdd(h_buffer_p, h * wght);
+      atomicAdd(wght_buffer_p, wght);
+    }
+  }
+}
+
+template <typename scalar_t>
+__global__ void forward_warp_max_motion_cuda_forward_kernel(
+    const int total_step,
+    const scalar_t* im0,
+    const scalar_t* flow,
+    scalar_t* im1,
+    int* d_buffer,
+    scalar_t* wght_buffer,
+    const int B,
+    const int C,
+    const int H,
+    const int W) {
+  // find max motion values for each target pixel
+  CUDA_KERNEL_LOOP(index, total_step) {
+    const int b = index / (H * W);
+    const int h = (index-b*H*W) / W;
+    const int w = index % W;
+    const scalar_t x = (scalar_t)w + flow[index*2+0];
+    const scalar_t y = (scalar_t)h + flow[index*2+1];
+    const int d = static_cast<int>(D_SCALE_INT * ::sqrt(flow[index*2+0] * flow[index*2+0] + flow[index*2+1] * flow[index*2+1]));
+    const int x_f = static_cast<int>(::floor(x));
+    const int y_f = static_cast<int>(::floor(y));
+    const int x_c = x_f + 1;
+    const int y_c = y_f + 1;
+    if(x_f>=0 && x_c<=W && y_f>=0 && y_c<=H){
+      const scalar_t nw_k = (x_c - x) * (y_c - y);
+      const scalar_t ne_k = (x - x_f) * (y_c - y);
+      const scalar_t sw_k = (x_c - x) * (y - y_f);
+      const scalar_t se_k = (x - x_f) * (y - y_f);
+      int* d_buffer_p = d_buffer+get_im_index(b, 0, y_f, x_f, 1, H, W);
+      find_max_motion(d, nw_k, d_buffer_p);
+      if (x_f>=0 && x_c<W && y_f>=0 && y_c<=H) {
+        find_max_motion(d, ne_k, d_buffer_p+1);
+      }
+      if (x_f>=0 && x_c<=W && y_f>=0 && y_c<H) {
+        find_max_motion(d, sw_k, d_buffer_p+W);
+      }
+      if (x_f>=0 && x_c<W && y_f>=0 && y_c<H) {
+        find_max_motion(d, se_k, d_buffer_p+W+1);
+      }
+    }
+  }
+  // accumulate values from max motion
+  CUDA_KERNEL_LOOP(index, total_step) {
+    const int b = index / (H * W);
+    const int h = (index-b*H*W) / W;
+    const int w = index % W;
+    const scalar_t x = (scalar_t)w + flow[index*2+0];
+    const scalar_t y = (scalar_t)h + flow[index*2+1];
+    const int d = static_cast<int>(D_SCALE_INT * ::sqrt(flow[index*2+0] * flow[index*2+0] + flow[index*2+1] * flow[index*2+1]));
+    const int x_f = static_cast<int>(::floor(x));
+    const int y_f = static_cast<int>(::floor(y));
+    const int x_c = x_f + 1;
+    const int y_c = y_f + 1;
+    if(x_f>=0 && x_c<=W && y_f>=0 && y_c<=H){
+      const scalar_t nw_k = (x_c - x) * (y_c - y);
+      const scalar_t ne_k = (x - x_f) * (y_c - y);
+      const scalar_t sw_k = (x_c - x) * (y - y_f);
+      const scalar_t se_k = (x - x_f) * (y - y_f);
+      const scalar_t* im0_p = im0+get_im_index(b, 0, h, w, C, H, W);
+      scalar_t* im1_p = im1+get_im_index(b, 0, y_f, x_f, C, H, W);
+      const int* d_buffer_p = d_buffer+get_im_index(b, 0, y_f, x_f, 1, H, W);
+      scalar_t* wght_buffer_p = wght_buffer+get_im_index(b, 0, y_f, x_f, 1, H, W);
+      for (int c = 0; c < C; ++c, im0_p+=H*W, im1_p+=H*W){
+        select_max_motion(d, *im0_p, nw_k, d_buffer_p, im1_p, wght_buffer_p);
+        if (x_f>=0 && x_c<W && y_f>=0 && y_c<=H) {
+          select_max_motion(d, *im0_p, ne_k, d_buffer_p+1, im1_p+1, wght_buffer_p+1);
+        }
+        if (x_f>=0 && x_c<=W && y_f>=0 && y_c<H) {
+          select_max_motion(d, *im0_p, sw_k, d_buffer_p+W, im1_p+W, wght_buffer_p+W);
+        }
+        if (x_f>=0 && x_c<W && y_f>=0 && y_c<H) {
+          select_max_motion(d, *im0_p, se_k, d_buffer_p+W+1, im1_p+W+1, wght_buffer_p+W+1);
+        }
+      }
+    }
+  }
+}
+
+at::Tensor forward_warp_max_motion_cuda_forward(
+    const at::Tensor im0, 
+    const at::Tensor flow,
+    const at::Tensor im1,
+    const at::Tensor d_buffer,
+    const at::Tensor wght_buffer) {
+  const int B = im0.size(0);
+  const int C = im0.size(1);
+  const int H = im0.size(2);
+  const int W = im0.size(3);
+  const int total_step = B * H * W;
+  AT_DISPATCH_FLOATING_TYPES(im0.type(), "forward_warp_forward_cuda", ([&] {
+    forward_warp_max_motion_cuda_forward_kernel<scalar_t>
+    <<<GET_BLOCKS(total_step), CUDA_NUM_THREADS>>>(
+      total_step,
+      im0.data<scalar_t>(),
+      flow.data<scalar_t>(),
+      im1.data<scalar_t>(),
+      d_buffer.data<int>(),
+      wght_buffer.data<scalar_t>(),
+      B, C, H, W);
+  }));
+
+  return im1;
+}
+
 at::Tensor forward_warp_cuda_forward(
     const at::Tensor im0, 
     const at::Tensor flow,

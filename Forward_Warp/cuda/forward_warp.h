@@ -17,4 +17,8 @@ inline int GET_BLOCKS(const int N){
 #define CUDA_KERNEL_LOOP(i, n) \
   for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < (n); i += blockDim.x * gridDim.x)
 
+// Define integer conversion
+#define D_SCALE_INT 100
+#define MOTION_TH (0.25 * D_SCALE_INT)
+
 #endif
