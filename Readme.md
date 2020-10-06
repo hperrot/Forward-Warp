@@ -2,6 +2,8 @@
 
 Has been tested in pytorch=0.4.0, python=3.6, CUDA=9.0
 
+Another implementatoin of optical flow forward warping can be found [here](https://github.com/hperrot/splatting).
+
 ### Install
 
 ```bash
